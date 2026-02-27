@@ -8,6 +8,6 @@
     "lint": "docker compose run --rm backend npm run lint && docker compose run --rm frontend npm run lint",
     "typecheck": "docker compose run --rm backend npm run typecheck && docker compose run --rm frontend npm run typecheck",
     "test": "docker compose run --rm backend npm test && docker compose run --rm frontend npm test",
-    "build": "docker compose run --rm backend npm run build && docker compose run --rm frontend npm run build"
+    "build": "docker compose run --rm backend npm run build && docker compose run --rm -e NODE_ENV=production frontend npm run build"
   }
 }
