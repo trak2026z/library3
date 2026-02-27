@@ -44,12 +44,14 @@ describe("GET /api/health", () => {
 
 describe("GET /api/books", () => {
   it("returns paginated items (defaults)", async () => {
+    mockCheckDbReady.mockResolvedValueOnce(true);
+
     fakePrisma.book.count.mockResolvedValueOnce(2);
     fakePrisma.book.findMany.mockResolvedValueOnce([
       { id: "1", title: "A", author: "X", isbn: "i1", publishedYear: 2020, copiesTotal: 1, copiesAvailable: 1 },
       { id: "2", title: "B", author: "Y", isbn: "i2", publishedYear: 2021, copiesTotal: 2, copiesAvailable: 2 }
     ]);
-
+     
     const app = createApp();
     const res = await request(app).get("/api/books");
 
@@ -64,6 +66,8 @@ describe("GET /api/books", () => {
   });
 
   it("applies pagination and sorting", async () => {
+    mockCheckDbReady.mockResolvedValueOnce(true);
+    
     fakePrisma.book.count.mockResolvedValueOnce(100);
     fakePrisma.book.findMany.mockResolvedValueOnce([{ id: "x" }]);
 
