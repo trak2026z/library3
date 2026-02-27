@@ -32,9 +32,18 @@ module.exports = [
     }
   },
 
-  // ✅ override dla samego pliku konfiguracyjnego ESLint (CJS + Node globals)
+  // override dla eslint config (CJS + Node globals)
   {
     files: ["eslint.config.js"],
+    rules: {
+      "no-undef": "off",
+      "@typescript-eslint/no-require-imports": "off"
+    }
+  },
+
+  // override dla prisma seed (CJS + Node globals)
+  {
+    files: ["prisma/**/*.cjs"],
     rules: {
       "no-undef": "off",
       "@typescript-eslint/no-require-imports": "off"
