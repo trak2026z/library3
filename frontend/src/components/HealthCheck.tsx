@@ -5,7 +5,12 @@ import { useEffect, useState } from "react";
 type Health = { status: string };
 
 function getApiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+  // Jeśli nie ustawione — użyj proxy /api w Next (same-origin)
+  return process.env.NEXT_PUBLIC_API_URL ?? "";
+}
+
+function formatApiLabel(baseUrl: string): string {
+  return baseUrl ? baseUrl : "same-origin (/api -> proxy)";
 }
 
 export function HealthCheck() {
@@ -18,7 +23,10 @@ export function HealthCheck() {
     async function run() {
       setState("loading");
       try {
-        const res = await fetch(`${getApiBaseUrl()}/api/health`, { cache: "no-store" });
+        const baseUrl = getApiBaseUrl();
+        const url = `${baseUrl}/api/health`;
+
+        const res = await fetch(url, { cache: "no-store" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as Health;
 
@@ -37,11 +45,13 @@ export function HealthCheck() {
     };
   }, []);
 
+  const baseUrl = getApiBaseUrl();
+
   return (
     <section aria-label="healthcheck">
       <h2>Health</h2>
       <p>
-        API: <code>{getApiBaseUrl()}</code>
+        API: <code>{formatApiLabel(baseUrl)}</code>
       </p>
       <p>
         Status: <strong>{state}</strong> {value ? `(value: ${value})` : null}

@@ -14,13 +14,11 @@ Używamy uproszczonej strategii:
 - Conventional Commits (np. `chore:`, `feat:`, `fix:`, `docs:`)
 - PR musi przejść Quality Gate (docelowo CI + lokalnie przez Docker Compose)
 
-## Lokalny dev (docelowo od kolejnych commitów)
-W tym momencie nie ma jeszcze scaffoldingu FE/BE ani docker-compose.
-W kolejnych commitach dodamy:
-- minimalne aplikacje FE/BE
-- `docker-compose.yml` z FE/BE/DB
-- `.env.example` dla FE i BE
-- CI Quality Gate
+## Lokalny dev (Docker Compose)
+Wymagania: Docker + Docker Compose
+
+```bash
+docker compose up --build
 
 ## Wymagania (źródło prawdy)
 Priorytet wymagań: `LibraryP.docx` (MVP/kontrakt).

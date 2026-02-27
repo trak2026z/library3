@@ -14,6 +14,16 @@ export default [
     }
   },
 
+  // ✅ Node globals dla Next config
+  {
+    files: ["next.config.mjs"],
+    languageOptions: {
+      globals: {
+        process: "readonly"
+      }
+    }
+  },
+
   {
     files: ["**/*.test.{ts,tsx}"],
     rules: {
