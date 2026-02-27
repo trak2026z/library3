@@ -1,6 +1,7 @@
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import swaggerUi from "swagger-ui-express";
 import { openApiSpec } from "./openapi";
+import { createBooksRouter } from "./routes/books";
 import { createHealthRouter } from "./routes/health";
 
 export function createApp(): Express {
@@ -12,6 +13,7 @@ export function createApp(): Express {
   // API
   const apiRouter = express.Router();
   apiRouter.use(createHealthRouter());
+  apiRouter.use(createBooksRouter());
   app.use("/api", apiRouter);
 
   // Swagger UI
