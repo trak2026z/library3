@@ -8,12 +8,12 @@ RUN apt-get update -y \
 FROM base AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
+COPY prisma ./prisma
 RUN npm ci
 
 FROM deps AS build
 WORKDIR /app
 COPY tsconfig.json eslint.config.js vitest.config.ts ./
-COPY prisma ./prisma
 COPY src ./src
 RUN npm run build
 
@@ -21,7 +21,6 @@ FROM deps AS dev
 WORKDIR /app
 ENV NODE_ENV=development
 COPY tsconfig.json eslint.config.js vitest.config.ts ./
-COPY prisma ./prisma
 COPY src ./src
 COPY --from=build /app/dist ./dist
 RUN chown -R node:node /app
@@ -33,6 +32,7 @@ CMD ["node", "dist/server.js"]
 FROM base AS prod-deps
 WORKDIR /app
 COPY package.json package-lock.json ./
+COPY prisma ./prisma
 RUN npm ci --omit=dev
 
 FROM base AS prod
