@@ -1,0 +1,22 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      target: prod
+
+  frontend:
+    build:
+      context: ./frontend
+      target: prod
+      args:
+        API_PROXY_TARGET: "http://backend:4000"
+
+  migrate:
+    build:
+      context: ./backend
+      target: init
+
+  seed:
+    build:
+      context: ./backend
+      target: init

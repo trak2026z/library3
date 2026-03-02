@@ -20,6 +20,12 @@ CMD ["npm", "run", "dev"]
 # (opcjonalnie na później) prod:
 FROM deps AS build
 WORKDIR /app
+
+# >>> DODANE: ustawiamy proxy target na etapie build (domyślnie na dockerowy host "backend")
+ARG API_PROXY_TARGET=http://backend:4000
+ENV API_PROXY_TARGET=${API_PROXY_TARGET}
+# <<<
+
 COPY next-env.d.ts tsconfig.json next.config.mjs eslint.config.mjs vitest.config.ts ./
 COPY src ./src
 RUN npm run build
