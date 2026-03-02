@@ -1,0 +1,152 @@
+name: publish-ghcr
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-ghcr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Versions
+        run: |
+          node -v
+          npm -v
+          docker --version
+          docker compose version
+
+      - name: Docker compose build (dev targets)
+        run: docker compose build
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v
+
+  publish:
+    needs: [quality-gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lowercase owner (GHCR requires lowercase)
+        id: vars
+        shell: bash
+        run: |
+          OWNER="${{ github.repository_owner }}"
+          echo "owner_lc=${OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU (multi-arch)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- backend ---
+      - name: Docker meta (backend)
+        id: meta_backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ steps.vars.outputs.owner_lc }}/library3-backend
+          tags: |
+            type=raw,value=latest
+            type=sha,format=long
+
+      - name: Build & push (backend)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: prod
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta_backend.outputs.tags }}
+          labels: ${{ steps.meta_backend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # --- backend-init (migrate/seed) ---
+      - name: Docker meta (backend-init)
+        id: meta_backend_init
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ steps.vars.outputs.owner_lc }}/library3-backend-init
+          tags: |
+            type=raw,value=latest
+            type=sha,format=long
+
+      - name: Build & push (backend-init)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: init
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta_backend_init.outputs.tags }}
+          labels: ${{ steps.meta_backend_init.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # --- frontend ---
+      - name: Docker meta (frontend)
+        id: meta_frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ steps.vars.outputs.owner_lc }}/library3-frontend
+          tags: |
+            type=raw,value=latest
+            type=sha,format=long
+
+      - name: Build & push (frontend)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          target: prod
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta_frontend.outputs.tags }}
+          labels: ${{ steps.meta_frontend.outputs.labels }}
+          build-args: |
+            API_PROXY_TARGET=http://backend:4000
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
