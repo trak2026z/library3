@@ -11,6 +11,13 @@ COPY package.json package-lock.json ./
 COPY prisma ./prisma
 RUN npm ci
 
+# Used for one-off tasks: migrations / seed. Override CMD in compose.
+FROM deps AS init
+WORKDIR /app
+RUN chown -R node:node /app
+USER node
+CMD ["node", "-e", "console.log('backend init image (migrate/seed)')"]
+
 FROM deps AS build
 WORKDIR /app
 COPY tsconfig.json eslint.config.js vitest.config.ts ./

@@ -1,0 +1,26 @@
+services:
+  migrate:
+    profiles: ["init"]
+    image: ghcr.io/${GHCR_OWNER:-trak2026z}/library3-backend-init:${IMAGE_TAG:-latest}
+    environment:
+      DATABASE_URL: "postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/library"
+    networks:
+      - app
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["npm", "run", "db:migrate"]
+
+  seed:
+    profiles: ["init"]
+    image: ghcr.io/${GHCR_OWNER:-trak2026z}/library3-backend-init:${IMAGE_TAG:-latest}
+    environment:
+      DATABASE_URL: "postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/library"
+    networks:
+      - app
+    restart: "no"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: ["npm", "run", "db:seed"]
