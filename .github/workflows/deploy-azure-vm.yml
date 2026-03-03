@@ -11,7 +11,7 @@ on:
         required: true
         default: "latest"
       run_seed:
-        description: "Uruchomić seed (zwykle tylko 1x, przy pierwszym wdrożeniu)"
+        description: "Uruchomić seed (zwykle tylko 1x, przy pierwszym wdrożeniuu)"
         required: true
         type: boolean
         default: false
