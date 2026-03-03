@@ -1,0 +1,98 @@
+name: deploy-azure-vm
+
+on:
+  workflow_run:
+    workflows: ["publish-ghcr"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Tag obrazu (np. latest lub sha-<40hex>)"
+        required: true
+        default: "latest"
+      run_seed:
+        description: "Uruchomić seed (zwykle tylko 1x, przy pierwszym wdrożeniu)"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-azure-vm
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    steps:
+      - name: Resolve deploy tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "IMAGE_TAG=${{ inputs.image_tag }}" >> "$GITHUB_ENV"
+            echo "RUN_SEED=${{ inputs.run_seed }}" >> "$GITHUB_ENV"
+          else
+            # tag zgodny z docker/metadata-action: type=sha,format=long => sha-<40hex>
+            echo "IMAGE_TAG=sha-${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_ENV"
+            echo "RUN_SEED=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.AZURE_VM_SSH_KEY }}
+
+      - name: Add known_hosts
+        shell: bash
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.AZURE_VM_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy on VM (pull -> migrate -> up)
+        shell: bash
+        env:
+          HOST: ${{ secrets.AZURE_VM_HOST }}
+          USER: ${{ secrets.AZURE_VM_USER }}
+          GHCR_TOKEN_READ: ${{ secrets.GHCR_TOKEN_READ }}
+          GHCR_USER: ${{ secrets.GHCR_USER }}
+        run: |
+          set -euo pipefail
+
+          ssh "${USER}@${HOST}" "bash -s" <<'REMOTE'
+          set -euo pipefail
+          export HISTFILE=/dev/null
+
+          DEPLOY_DIR="/opt/library3"
+          cd "$DEPLOY_DIR"
+
+          # Aktualizuj compose'y (jeśli w repo coś się zmieni)
+          git fetch origin main
+          git checkout main
+          git pull --ff-only
+
+          # Login do GHCR (token przekazany z workflow; GitHub maskuje w logach)
+          echo "${GHCR_TOKEN_READ}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
+
+          # użyj obrazu powiązanego z commitem (sha-...) albo input z workflow_dispatch
+          export IMAGE_TAG="${IMAGE_TAG}"
+
+          docker compose -f docker-compose.prod.yml -f docker-compose.prod.init.yml --env-file .env pull
+
+          docker compose -f docker-compose.prod.yml -f docker-compose.prod.init.yml --env-file .env --profile init run --rm migrate
+
+          if [ "${RUN_SEED}" = "true" ]; then
+            docker compose -f docker-compose.prod.yml -f docker-compose.prod.init.yml --env-file .env --profile init run --rm seed
+          fi
+
+          docker compose -f docker-compose.prod.yml --env-file .env up -d --remove-orphans
+
+          docker logout ghcr.io || true
+REMOTE
