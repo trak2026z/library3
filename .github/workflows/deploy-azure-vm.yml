@@ -66,7 +66,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          ssh "${USER}@${HOST}" "bash -s" <<'REMOTE'
+          ssh "${USER}@${HOST}" \
+           "GHCR_TOKEN_READ='${GHCR_TOKEN_READ}' GHCR_USER='${GHCR_USER}' IMAGE_TAG='${IMAGE_TAG}' RUN_SEED='${RUN_SEED}' bash -s" <<'REMOTE'
           set -euo pipefail
           export HISTFILE=/dev/null
 
