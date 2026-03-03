@@ -94,10 +94,25 @@ jobs:
           fi
 
           docker compose -f docker-compose.prod.yml --env-file .env up -d --remove-orphans db backend frontend
-          docker compose -f docker-compose.prod.yml --env-file .env ps
+          docker compose -f docker-compose.prod.yml --env-file .env ps --all
 
-          # twardy smoke-test (jeśli padnie, job fail)
-          curl -fsS http://localhost/api/health >/dev/null
+          # czekamy max ~60s aż API zacznie odpowiadać
+          ok=0
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost/api/health >/dev/null; then
+              ok=1
+              break
+            fi
+            sleep 2
+          done
+
+          if [ "$ok" -ne 1 ]; then
+            echo "ERROR: API healthcheck failed. Printing logs..."
+            docker compose -f docker-compose.prod.yml --env-file .env logs --tail=200 backend || true
+            docker compose -f docker-compose.prod.yml --env-file .env logs --tail=200 frontend || true
+            docker compose -f docker-compose.prod.yml --env-file .env ps --all || true
+            exit 1
+          fi
 
           docker logout ghcr.io || true
           REMOTE
