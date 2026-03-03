@@ -93,7 +93,11 @@ jobs:
             docker compose -f docker-compose.prod.yml -f docker-compose.prod.init.yml --env-file .env --profile init run --rm seed
           fi
 
-          docker compose -f docker-compose.prod.yml --env-file .env up -d --remove-orphans
+          docker compose -f docker-compose.prod.yml --env-file .env up -d --remove-orphans db backend frontend
+          docker compose -f docker-compose.prod.yml --env-file .env ps
+
+          # twardy smoke-test (jeśli padnie, job fail)
+          curl -fsS http://localhost/api/health >/dev/null
 
           docker logout ghcr.io || true
           REMOTE
