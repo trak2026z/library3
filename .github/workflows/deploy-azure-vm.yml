@@ -87,10 +87,10 @@ jobs:
 
           docker compose -f docker-compose.prod.yml -f docker-compose.prod.init.yml --env-file .env pull
 
-          docker compose -f docker-compose.prod.yml -f docker-compose.prod.init.yml --env-file .env --profile init run --rm migrate
+          docker compose -f docker-compose.prod.yml -f docker-compose.prod.init.yml --env-file .env --profile init run --rm -T migrate </dev/null
 
           if [ "${RUN_SEED}" = "true" ]; then
-            docker compose -f docker-compose.prod.yml -f docker-compose.prod.init.yml --env-file .env --profile init run --rm seed
+            docker compose -f docker-compose.prod.yml -f docker-compose.prod.init.yml --env-file .env --profile init run --rm -T seed </dev/null
           fi
 
           docker compose -f docker-compose.prod.yml --env-file .env up -d --remove-orphans db backend frontend
