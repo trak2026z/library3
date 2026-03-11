@@ -1,4 +1,4 @@
-# Deployment — monorepo / Library3 (Docker Compose, GHCR, Azure VM)
+# Deployment — monorepo / library3 (Docker Compose, GHCR, Azure VM)
 
 Niniejszy dokument stanowi **ujednoliconą instrukcję wdrażania** dla aplikacji utrzymywanej w monorepo (np. `frontend/`, `backend/`, `infra/`, `docs/`) oraz dla wariantu produkcyjnego uruchamianego na **Azure VM** z obrazami publikowanymi do **GHCR**.
 

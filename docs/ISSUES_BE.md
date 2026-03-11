@@ -1,5 +1,5 @@
 # ISSUES_BE.md
-# Issues BE (Backend) — Library
+# Issues BE (Backend) — library3
 
 Cel: backlog dla backendu (Node.js/Express/TS ESM/Prisma/Postgres) zgodny z kontraktem MVP oraz kompatybilny z FE.
 
