@@ -1,6 +1,6 @@
 # docs/azure/runbook.md
 
-# Azure VM Runbook (Library3) — GHCR + Docker Compose + HTTP-only
+# Azure VM Runbook (library3) — GHCR + Docker Compose + HTTP-only
 
 Ten runbook opisuje operacje wdrożeniowe na **jednej VM** w Azure (MVP):
 - publiczny dostęp: **HTTP :80**

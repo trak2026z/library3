@@ -4,7 +4,7 @@ import { HealthCheck } from "@/components/HealthCheck";
 export default function HomePage() {
   return (
     <>
-      <h1>Library</h1>
+      <h1>Library3</h1>
       <p>Frontend skeleton (Next.js + TS). Docker Compose proxy: /api → backend.</p>
 
       <HealthCheck />

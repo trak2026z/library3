@@ -1,5 +1,5 @@
 # ISSUES_FE.md
-# Issues FE (Frontend) — Library-tr
+# Issues FE (Frontend) — library3
 
 > Uwaga: plik nazwany zgodnie z prośbą (`ISSUES_BE.md`), ale zawartość dotyczy Frontendu (FE).
 
