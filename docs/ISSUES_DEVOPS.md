@@ -1,111 +1,133 @@
-# docs/ISSUES_DEVOPS.md
+# Issues DevOps — library3
 
-# Issues DevOps (library3)
+Ten dokument opisuje backlog DevOps w formie EPIC → Issue → AC.
+Repo posiada już fundamenty: Docker Compose (dev/prod), CI quality gate, GHCR publish, deploy na Azure VM.
+Celem backlogu jest dopięcie braków i uszczelnienie procesu.
 
-Dokument zawiera listę tematów DevOps w formie EPIC → Issue → AC (Acceptance Criteria).
-Zakres jest dopasowany do tego, co faktycznie zostało wdrożone w repo `trak2026z/library3`.
-
----
-
-## EPIC DO-A — Repo, standardy pracy i “quality gate” (foundation)
-
-### DO-A1. Szablony PR + podstawowa obsługa pracy w GitHub
-AC:
-- istnieje PR template w repo
-- workflow CI jest uruchamiany na `push` i `pull_request`
-
-### DO-A2. Ujednolicone skrypty monorepo (root scripts)
-Zakres: agregaty dla FE/BE z root poziomu.
-AC:
-- z root poziomu da się uruchomić: `npm run lint`, `npm run typecheck`, `npm run test`, `npm run build`
-- polecenia uruchamiają FE i BE w spójny sposób (przez `docker compose run`)
-
-### DO-A3. Quality Gate (CI) dla FE+BE
-Zakres: lint + typecheck + test + build + compose build.
-AC:
-- istnieje workflow CI wykonujący `docker compose build` oraz `npm run lint/typecheck/test/build`
-- pipeline kończy się niepowodzeniem przy błędach lint/type/test/build
-- po jobie wykonywany jest cleanup (`docker compose down -v`)
+Zasada pracy:
+`mały diff → compose-test → compose-run → commit → push → PR`.
 
 ---
 
-## EPIC DO-B — Local Dev: Docker Compose (dev UX)
-
-### DO-B1. Local dev przez Docker Compose (FE/BE/DB)
-AC:
-- `docker compose up --build` stawia `db`, `backend`, `frontend`
-- `backend` łączy się z bazą po `db:5432`
-- `frontend` ma proxy `/api/*` do `backend` (przez `API_PROXY_TARGET` + rewrites)
-
-### DO-B2. Healthchecki i kolejność startu w dev
-AC:
-- `db` ma healthcheck (`pg_isready`)
-- `backend` ma healthcheck (`/api/health`)
-- `frontend` ma healthcheck (HTTP)
-- `backend` zależy od zdrowego `db`, a `frontend` od zdrowego `backend` (w compose)
-
-### DO-B3. Skrypty operacyjne dev (root)
-AC:
-- istnieją skrypty: `dev:up`, `dev:down`, `dev:logs`
-- istnieją skrypty agregujące FE/BE: `lint`, `typecheck`, `test`, `build`
+## Definition of Done (DevOps)
+- Compose dev i prod działają powtarzalnie.
+- Sekrety nie trafiają do repo.
+- CI blokuje regresje (lint/type/test/build + compose build).
+- Deploy jest deterministyczny (tag sha), ma smoke test i rollback.
 
 ---
 
-## EPIC DO-C — Standard obrazów i tagowania (Dockerfile/konwencje)
+## EPIC DO-00 — Spójność FE (NextAuth) vs proxy backendu (P0)
 
-### DO-C1. Multi-stage Dockerfile dla FE i BE
-AC:
-- `frontend/Dockerfile` ma targety `dev` i `prod`
-- `backend/Dockerfile` ma targety `dev` i `prod`
-- obrazy działają jako non-root (`USER node`)
-- runtime ma healthchecki
+### DO-01 (P0) — Zmiana proxy: `/api/*` -> `/_api/*` (wspólnie z FE)
+Opis:
+- Zaktualizuj `frontend/next.config.*` i dokumentację.
+- Zaktualizuj przykłady curl i healthchecki, jeśli odwołują się do FE proxy.
 
-### DO-C2. Wymuszenie poprawnego proxy w produkcji (Next.js)
 AC:
-- `frontend` w produkcji nie używa domyślnego `http://localhost:4000` jako targetu proxy
-- `API_PROXY_TARGET` jest ustawiany na etapie build (lub przekazywany jako build-arg) tak, aby w kontenerze wskazywał `http://backend:4000`
-
-### DO-C3. Obraz inicjalizacyjny dla migracji i seeda
-AC:
-- istnieje target `init` w `backend/Dockerfile` przeznaczony do zadań jednorazowych
-- `init` pozwala uruchomić `db:migrate` i `db:seed` (prisma CLI dostępne)
+- NextAuth działa (FE `/api/auth/*` nie jest proxy’owane)
+- Backend nadal działa na `/api/*`
+- FE używa `/_api/*` dla requestów do backendu
 
 ---
 
-## EPIC DO-D — Prod runtime: Docker Compose (single host)
+## EPIC DO-A — Repo / standardy / quality gate (utrzymanie)
 
-### DO-D1. Pliki produkcyjne compose
-AC:
-- istnieje `docker-compose.prod.yml` dla runtime (db/backend/frontend)
-- istnieje `docker-compose.prod.init.yml` dla zadań init (migrate/seed)
-- istnieje `.env.prod.example` jako szablon konfiguracji (bez commitowania `.env`)
+### DO-A1 (P0) — Quality gate w CI (weryfikacja i utrzymanie)
+Stan:
+- Workflow `ci.yml` istnieje i uruchamia: compose build + lint/type/test/build.
 
-### DO-D2. Procedura init DB w prod
+Doprecyzowanie:
+- Utrzymuj spójność wersji Node/Docker i czasę wykonania.
+- Utrzymuj cleanup `down -v` po jobie.
+
 AC:
-- migracje wykonują się przez `migrate` (init)
-- seed jest wykonywany opcjonalnie (tylko na pierwszym wdrożeniu lub ręcznie)
+- CI jest jedyną bramką merge (branch protection) — DO POTWIERDZENIA (ustawienia repo)
+
+### DO-A2 (P1) — Issue templates (opcjonalnie)
+AC:
+- Repo ma folder `.github/ISSUE_TEMPLATE/*` z template dla: BE/FE/DevOps/bug
 
 ---
 
-## EPIC DO-E — GitHub Actions: publikacja obrazów i deploy
+## EPIC DO-B — Local dev: Docker Compose UX
 
-### DO-E1. Publikacja obrazów do GHCR
-AC:
-- istnieje workflow `publish-ghcr` budujący i publikujący obrazy:
-  - `library3-backend`
-  - `library3-backend-init`
-  - `library3-frontend`
-- tagowanie obejmuje `latest` oraz `sha-<commit>`
+### DO-B1 (P0) — Compose dev E2E: FE/BE/DB
+Stan:
+- `docker-compose.yml` istnieje (db/backend/frontend + healthcheck).
 
-### DO-E2. Deploy na Azure VM przez SSH (Compose)
 AC:
-- istnieje workflow `deploy-azure-vm` uruchamiany po sukcesie `publish-ghcr` oraz ręcznie (`workflow_dispatch`)
-- deploy wykonuje: `pull` → `migrate` → (opcjonalnie `seed`) → `up -d` dla `db/backend/frontend`
-- w deployu poprawnie przekazywane są zmienne do zdalnego skryptu (GHCR_USER/GHCR_TOKEN_READ/IMAGE_TAG/RUN_SEED)
+- `docker compose up --build` → wszystkie serwisy healthy
+- root scripts (lint/type/test/build) działają w compose
 
-### DO-E3. Stabilność deploy skryptu (SSH heredoc + compose run)
+### DO-B2 (P1) — `.env.example` per komponent (backend + frontend)
 AC:
-- `docker compose run` jest wykonywane z `-T` i `</dev/null`, aby nie przejmowało stdin skryptu przesyłanego po SSH
-- deploy po `migrate` kontynuuje do `up -d` i weryfikuje zdrowie API (np. `/api/health`)
+- `backend/.env.example` (DATABASE_URL, JWT_SECRET, JWT_EXPIRES_IN, PORT, CORS_ORIGIN)
+- `frontend/.env.example` (NEXTAUTH_URL, NEXTAUTH_SECRET, NEXT_PUBLIC_API_BASE_URL / lub strategia proxy)
+- dokumentacja mówi jednoznacznie, kiedy używać `host` vs `docker network`
 
 ---
+
+## EPIC DO-C — Obrazy i “init” (migrate/seed)
+
+### DO-C1 (P0) — Obraz `backend-init` do migracji/seed (utrzymanie)
+Stan:
+- `docker-compose.prod.init.yml` używa osobnego obrazu `library3-backend-init`.
+
+AC:
+- `migrate` używa `prisma migrate deploy`
+- `seed` jest uruchamiany świadomie (pierwsze wdrożenie lub ręcznie)
+
+### DO-C2 (P1) — Sanity-check migracji w CI (opcjonalnie)
+AC:
+- CI potrafi uruchomić `migrate` na tymczasowej DB (tylko jeśli czas pozwoli)
+
+---
+
+## EPIC DO-D — Produkcja (Compose na VM)
+
+### DO-D1 (P0) — Utrzymanie plików prod compose
+Stan:
+- `docker-compose.prod.yml`, `docker-compose.prod.init.yml`, `.env.prod.example` istnieją.
+
+AC:
+- `db` nie ma publicznie wystawionego portu w produkcji
+- `frontend` jest jedynym serwisem z portem publicznym
+
+### DO-D2 (P0) — Procedura rollback
+AC:
+- rollback = zmiana `IMAGE_TAG` na poprzedni `sha-...` + `compose pull` + `up -d`
+- opisane w `docs/DEPLOYMENT_RUNBOOK_library3.md`
+
+---
+
+## EPIC DO-E — GitHub Actions: GHCR + Azure VM
+
+### DO-E1 (P0) — Publish GHCR
+Stan:
+- workflow `publish-ghcr.yml` buduje i publikuje 3 obrazy.
+
+AC:
+- tagi: `latest` i `sha-<commit>` (deterministyczne wdrożenia)
+
+### DO-E2 (P0) — Deploy Azure VM
+Stan:
+- workflow `deploy-azure-vm.yml` jest obecny i ma smoke test `/api/health`.
+
+AC:
+- deploy robi: pull → migrate → (opcjonalnie seed) → up -d
+- `docker compose run` używa `-T` i `</dev/null` (stabilność przez SSH)
+- logi z backend/frontend drukowane przy failure
+
+---
+
+## EPIC DO-F — Security i utrzymanie (P1/P2)
+
+### DO-F1 (P1) — Dependabot + podstawowe skany (opcjonalnie)
+AC:
+- dependabot dla npm + docker
+- secret scanning włączone (ustawienia repo)
+
+### DO-F2 (P2) — Backup/restore procedury DB (ops)
+AC:
+- opisane w `docs/DEPLOYMENT_RUNBOOK_library3.md` (pg_dump / restore / backup wolumenu)

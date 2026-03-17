@@ -1,424 +1,229 @@
-# ISSUES_FE.md
 # Issues FE (Frontend) — library3
 
-> Uwaga: plik nazwany zgodnie z prośbą (`ISSUES_BE.md`), ale zawartość dotyczy Frontendu (FE).
+Celem dokumentu jest przygotowanie kompletnego backlogu FE dla MVP aplikacji biblioteki (Next.js + TS),
+z zachowaniem zasady:
+`mały diff → compose-test → compose-run → commit → push → PR`.
 
-Cel: backlog FE (Next.js App Router + TypeScript) pod aplikację biblioteki, kompatybilny z kontraktem BE `/api/*`.
+FE jest konsumentem kontraktu API z BE (`/api/*`), ale FE ma własny routing i guardy RBAC.
 
-## Stan repo (snapshot)
-- FE: `frontend/` (Next.js), kod w `frontend/src/*`
-- App Router: `frontend/src/app/*` (jest już `/books`, `/books/new`, `/books/[id]/edit`)
-- NextAuth: `frontend/src/app/api/auth/[...nextauth]/route.ts` (Credentials → call do backendu)
-- API client: `frontend/src/lib/axios.ts` (env: `NEXT_PUBLIC_API_URL`, domyślnie `http://localhost:4000`)
-- Styling: aktualnie “bootstrap-like” klasy + własny CSS (`globals.css`), brak Tailwind
+---
+
+## Źródła prawdy (priorytet)
+1. LibraryP.docx — ekrany MVP, flow użytkownika, RBAC, walidacja, paginacja/szukaj/sort.
+2. Repo `library3` — stan bieżący (Next.js skeleton, proxy, Compose).
+3. Repo `Library-tr` + LibraryR.docx — inspiracja.
+
+---
+
+## MVP — routing (FE)
+
+### Public
+- `/` — katalog książek (tabela + search + paginacja + status dostępności)
+- `/login` — logowanie
+- `/register` — rejestracja
+
+### USER (zalogowany)
+- `/loans` — „Moje wypożyczenia” (aktywne + historia) + zwrot
+
+### ADMIN
+- `/admin/books` — CRUD książek
+- `/admin/loans` — aktywne wypożyczenia + oznacz zwrot
+- `/admin/users` — lista użytkowników + usuń (z ograniczeniami)
+
+---
+
+## Krytyczne ryzyko integracyjne: NextAuth vs proxy `/api/*`
+Jeżeli używamy NextAuth, domyślny handler działa po stronie FE pod `/api/auth/*`.
+Jeżeli jednocześnie proxy’ujemy `/api/*` do backendu, to `/api/auth/*` zostanie „zjedzone” przez proxy.
+
+Decyzja (do wdrożenia w backlogu):
+- Zmieniamy proxy do backendu z `/api/*` na `/_api/*` (lub analogiczne), aby:
+  - `/api/auth/*` było dostępne dla NextAuth (FE)
+  - `/_api/*` proxy’owało do `backend:/api/*`
+
+W konsekwencji FE zawsze:
+- używa `/_api/...` dla requestów do backendu w trybie „same-origin”
+- NIE używa `/api/...` (bo to przestrzeń FE API routes)
+
+---
 
 ## Konwencje FE (docelowe)
-- Brak “gołych requestów” w `app/*` (tylko feature/hook/service)
-- Jeden klient API (axios/fetch) + 1 standard obsługi błędów
-- RBAC: UI “defense-in-depth” (ukrywanie akcji + guard tras)
-- DoD (Definition of Done) dla issue:
-  - `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` przechodzą
-  - aktualizacja README i (jeśli dotyczy) kontraktów DTO
-  - a11y dla kluczowych UI (modal, formularze)
-
-## Proponowane etykiety (GitHub labels)
-- area/fe, area/auth, area/api, area/admin, area/ux, area/devops, area/tests, area/docs
-- type/feat, type/fix, type/chore, type/refactor
-- prio/p0, prio/p1, prio/p2
-- status/blocked
+- Brak „gołych requestów” w komponentach UI:
+  - requesty idą przez `lib/api/*` (client + services) i hooki.
+- Jedno mapowanie błędów:
+  - 401 → redirect do `/login?returnUrl=...`
+  - 403 → komunikat „Brak uprawnień”
+  - 409 → komunikat konfliktu + UX (np. disabled, toast)
+- RBAC: UI guard + backend guard (defense-in-depth).
+- Spójne stany: loading/empty/error, blokady przycisków.
 
 ---
 
-# EPIC FE-A — Fundamenty projektu i konfiguracja
-
-## FE-A0 (P0). Naprawa spójności FE ↔ BE (prefix `/api`, baseURL, auth/login)
-Opis: FE musi mówić do BE po `/api/*` (np. `/api/auth/login`), a nie po gołych `/auth/login`.
-AC:
-- NextAuth (Credentials) loguje się przez `/api/auth/login`
-- Jednoznaczny `API_BASE_URL` i/lub `NEXT_PUBLIC_API_BASE_URL` (z opisem w README)
-- Lokalne uruchomienie w `docker compose` działa end-to-end (FE → BE)
-
-Zadania:
-- ujednolicić endpointy w `src/app/api/auth/[...nextauth]/route.ts`
-- doprecyzować nazwę env: preferowane `NEXT_PUBLIC_API_BASE_URL` (z fallback na istniejące `NEXT_PUBLIC_API_URL`)
-- dodać krótki “contract note” w README (prefix `/api`)
-
-## FE-A1. Inicjalizacja projektu (Next.js + TypeScript + Tailwind)
-AC:
-- `npm run dev` uruchamia FE bez błędów
-- Tailwind działa (widoczny styl globalny + utilities)
-- routing działa: min. `/`, `/login`, `/register` jako placeholdery + istniejące `/books`
-
-Zadania:
-- dodać Tailwind (tailwindcss + postcss + autoprefixer) i skonfigurować `globals.css`
-- stworzyć placeholdery `app/login/page.tsx`, `app/register/page.tsx`
-
-## FE-A2. Konfiguracja jakości (ESLint/Prettier, import order, scripts)
-Doprecyzowanie: dodaj `format:check` i `typecheck`.
-AC:
-- `npm run lint`, `npm run format:check`, `npm run typecheck` przechodzą
-- spójne reguły importów (sort + aliasy)
-- (opcjonalnie) pre-commit hook blokuje złe formatowanie/lint
-
-Zadania:
-- dodać Prettier + config + skrypty `format`, `format:check`
-- dodać `typecheck` (`tsc --noEmit`)
-- dodać reguły import order (np. eslint plugin) + alias `@/*` (już istnieje w tsconfig)
-
-## FE-A3. Struktura katalogów i konwencje
-Zakres (App Router, rekomendacja):
-- `src/app/` (routes + layouty)
-- `src/components/` (shared UI)
-- `src/features/` (books/loans/admin/auth)
-- `src/lib/api/`, `src/lib/auth/`
-- `src/types/` (DTO/kontrakty), `src/hooks/`, `src/utils/`
-AC:
-- opis konwencji w README
-- brak “gołych requestów” w `app/*`
-
-Zadania:
-- utworzyć foldery + przenieść logikę z `app/books/*` do `features/books/*` (app = tylko “composition”)
-
-## FE-A4. Konfiguracja `.env` i walidacja runtime
-AC:
-- brak wymaganych env → czytelny błąd na starcie (`next dev` / `next start`)
-- działa lokalnie i w Dockerze (dev)
-- `.env.example` kompletny
-
-Zadania:
-- dodać `src/lib/env.ts` z walidacją (zod/envalid)
-- `.env.example` (min.: `NEXT_PUBLIC_API_BASE_URL`, `NEXTAUTH_URL`, `NEXTAUTH_SECRET`)
-
-## FE-A5. Layout bazowy i styl aplikacji
-AC:
-- globalny `RootLayout` używany przez wszystkie strony
-- wspólne komponenty: `Container`, `Navbar`, podstawowa typografia
-- brak duplikacji klas w wielu miejscach (wydzielone komponenty)
-
-Zadania:
-- dodać `Navbar` (linki zależne od roli/sesji)
-- `Container` + style bazowe w Tailwind
-
-## FE-A6. Strona błędu i boundary + not-found
-AC:
-- `app/error.tsx` i `app/not-found.tsx` istnieją i mają czytelny UX
-- aplikacja nie daje “białej strony” przy błędzie w fetch/render
+## Definition of Done (DoD) — każde issue
+- `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` przechodzą.
+- Ręczny test w compose (min. „happy path” dla funkcji).
+- Brak sekretów w repo.
+- Jeżeli issue dotyczy kontraktu — opis zmian w `ISSUES_BE_library3_MVP.md` / OpenAPI.
 
 ---
 
-# EPIC FE-B — Warstwa komunikacji z API i typy
-
-## FE-B1. Klient API (Axios instance: baseURL + timeout + headers)
-AC:
-- jedno miejsce konfiguracji (`src/lib/api/client.ts`)
-- timeout ustawiony sensownie
-- brak duplikacji konfiguracji w serwisach
-
-Zadania:
-- przenieść/rozszerzyć obecny `src/lib/axios.ts` do `src/lib/api/client.ts`
-- ustawić `Content-Type`, `Accept`, timeout, obsługę prefix `/api`
-
-## FE-B2. Interceptory: token/session + mapowanie błędów
-Zakres:
-- 401: `signOut()` lub redirect do `/login` + `returnUrl`
-- 403: komunikat “Brak uprawnień”
-- 409: komunikat konfliktu (ISBN, aktywne wypożyczenie)
-- 400/422: mapowanie błędów walidacji do formularza
-AC:
-- powtarzalne zachowanie w całej aplikacji (toasty + inline errors)
-- brak rozjechanych komunikatów dla tego samego kodu
-
-Zadania:
-- centralny `ApiError` + mapper `{ success:false, error:{code,message,details?} }`
-- interceptory axios + integracja z toast systemem
-
-## FE-B3. Typy/kontrakty danych (User, Book, Loan, paginacja)
-AC:
-- typy używane w hookach/serwisach/komponentach
-- brak `any` w krytycznych miejscach
-- wspólny typ paginacji
-
-Zadania:
-- `src/types/api.ts` (User/Book/Loan/Pagination + ErrorResponse)
-- spiąć typy z serwisami
-
-## FE-B4. Warstwa serwisów API (auth/books/loans/admin/users)
-AC:
-- komponenty nie robią “gołych requestów”
-- serwisy zwracają dane w 1 standardzie (unwrap `{success,data}` albo typed result)
-
-Zadania:
-- `src/lib/api/services/*` (auth/books/loans/users)
-
-## FE-B5. Warstwa data-fetching (cache/dedup/retry)
-Propozycja: TanStack Query.
-AC:
-- listy mają cache + dedup
-- retry/backoff sensownie ustawione
-- invalidacja po mutacjach odświeża właściwe query
-- brak spamowania API przy szybkim szukaniu
-
-Zadania:
-- dodać TanStack Query provider w layout
-- query keys + invalidacje (books, loans, users)
+## Proponowane labelki GitHub
+- `area/fe`, `area/auth`, `area/api`, `area/admin`, `area/ux`, `area/tests`, `area/docs`
+- `type/feat`, `type/fix`, `type/chore`, `type/refactor`
+- `prio/p0`, `prio/p1`, `prio/p2`
+- `blocked`
 
 ---
 
-# EPIC FE-C — Autentykacja i autoryzacja (NextAuth + RBAC)
+## Kolejność realizacji (minimalizacja ryzyka integracyjnego)
+1. Stabilizacja sposobu komunikacji z BE (proxy path) + typy (`FE-01..FE-03`)
+2. Auth (NextAuth) + guardy (`FE-04..FE-07`)
+3. Katalog (`FE-08..FE-12`)
+4. Loans USER (`FE-13..FE-16`)
+5. Admin (`FE-17..FE-21`)
+6. Stabilizacja UX/testy (`FE-24..FE-26`)
 
-## FE-C1. Integracja NextAuth (Credentials, callbacks, session shape)
+---
+
+# Backlog Issues (FE)
+
+## EPIC FE-00 — Fundamenty i spójność integracyjna (P0)
+
+### FE-01 (P0) — Zmiana proxy backendu: `/api/*` -> `/_api/*`
+Opis:
+- Zmień `next.config.*` rewrites tak, aby proxy do backendu nie zajmowało `/api/*`.
+- Zmień FE requesty: `/api/...` → `/_api/...`.
+
 AC:
-- logowanie działa, sesja utrzymana po refresh
-- wylogowanie działa
-- w sesji: min. `user.id`, `user.role`, oraz token BE (jeśli potrzebny)
+- FE działa w compose (dev) i widzi backend przez `/_api/health`
+- `/api/auth/*` pozostaje wolne dla NextAuth
 
-Zadania:
-- dopisać callbacks (jwt/session) i znormalizować payload z BE
-- walidacja env `NEXTAUTH_URL`, `NEXTAUTH_SECRET`
-
-## FE-C2. Strony: Logowanie i Rejestracja
+### FE-02 (P0) — Dodanie zależności MVP: NextAuth + Axios + Tailwind
 AC:
-- walidacja klienta + błędy z API do pól/toastów
-- flow po rejestracji jest jednoznaczne (auto-login lub redirect do login) i spójne z BE
+- `npm install next-auth axios tailwindcss postcss autoprefixer`
+- Tailwind działa globalnie
+- build działa w compose
 
-Zadania:
-- `/login`, `/register` (form + error mapping)
-- decyzja: auto-login po register vs redirect (spisać w README)
-
-## FE-C3. Ochrona tras (public/protected) + returnUrl
+### FE-03 (P0) — API client + typy kontraktu (User/Book/Loan + Pagination + Error)
 AC:
-- niezalogowany nie wejdzie w `/loans`
-- USER nie wejdzie w `/admin/*`
+- istnieje `src/lib/api/client.ts` + `src/lib/api/services/*`
+- typy w `src/types/*`
+- jedna obsługa błędów 401/403/409
+
+---
+
+## EPIC FE-01 — Auth i RBAC (P0)
+
+### FE-04 (P0) — NextAuth Credentials: integracja z BE `/api/auth/login`
+AC:
+- login działa end-to-end
+- session zawiera `user.id`, `user.role`, `user.token` (token z BE)
+- logout działa
+
+### FE-05 (P0) — Strony `/login` i `/register`
+AC:
+- walidacja klienta (email, hasło min. 6, confirm password)
+- 409 i 401 mapowane na czytelne komunikaty
+
+### FE-06 (P0) — Guard tras: public/USER/ADMIN + returnUrl
+AC:
+- niezalogowany nie wejdzie na `/loans`
+- USER nie wejdzie na `/admin/*`
 - po zalogowaniu wraca na `returnUrl`
 
-Zadania:
-- middleware lub guard layoutów (App Router)
-- helper do budowania `returnUrl`
-
-## FE-C4. Kontrola roli (RBAC w UI)
+### FE-07 (P0) — Navbar + widoczność akcji zależnie od roli
 AC:
-- linki/akcje admina niewidoczne dla USER
-- guard blokuje wejście w URL mimo ręcznej nawigacji
+- linki admina widoczne tylko dla ADMIN
+- CTA w katalogu zależne od sesji
 
 ---
 
-# EPIC FE-D — Widok publiczny: katalog książek
+## EPIC FE-02 — Katalog książek (P0)
 
-## FE-D0 (P0). Refactor istniejącego `/books` z mocków na API + spójny UI kit
-Opis: w repo jest makieta `/books` i `BookForm`, ale bez API i z “bootstrap-like” klasami.
+### FE-08 (P0) — Widok `/`: tabela katalogu z API
 AC:
-- lista książek oparta o API
-- UI spójny (Tailwind) + obsługa stanów
+- tabela: tytuł/autor/ISBN/status
+- dane z `GET /api/books`
 
-Zadania:
-- przenieść UI do `features/books`
-- zamienić klasy bootstrap na Tailwind (lub shadcn/ui)
-
-## FE-D1. Strona główna: tabela katalogu książek
-AC:
-- tabela renderuje `title/author/isbn/status`
-- działa na danych z API (bez mocków)
-
-## FE-D2. Dostępność + CTA
-AC:
-- status zgodny z API (`isAvailable`)
-- dla wypożyczonych CTA “Wypożycz” disabled
-- dla niezalogowanych CTA prowadzi do login (z returnUrl)
-
-## FE-D3. Wyszukiwanie + debounce
+### FE-09 (P0) — Search + debounce + synchronizacja z URL
 AC:
 - debounce 300–500ms
-- brak spamowania API
-- search zsynchronizowany z query param w URL
+- `search` w query param
 
-## FE-D4. Sortowanie + synchronizacja stanu
+### FE-10 (P0) — Paginacja + limit 10/20/50/100
 AC:
-- sort wpływa na listę (parametry do API)
-- stan sortowania widoczny w UI
-- stan w URL
-
-## FE-D5. Paginacja + limit (10/20/50/100)
-AC:
-- liczenie stron na podstawie metadanych
+- limit wybieralny
 - zmiana limitu resetuje stronę do 1
 
-## FE-D6. Obsługa stanów: loading/empty/error
+### FE-11 (P1) — Sortowanie (SHOULD)
 AC:
-- loading skeleton/spinner
-- empty state
-- error state + retry
+- sortBy/order w URL i w requestach
+- UI pokazuje aktywny sort
+
+### FE-12 (P0) — Stany loading/empty/error + retry
+AC:
+- brak „białych stron”
+- spójne komunikaty
 
 ---
 
-# EPIC FE-E — USER: wypożyczenia
+## EPIC FE-03 — USER: wypożyczenia (P0)
 
-## FE-E1. LoanModal (potwierdzenie wypożyczenia/zwrotu)
+### FE-13 (P0) — LoanModal: potwierdzenie wypożyczenia/zwrotu
 AC:
-- focus trap + ESC
-- pokazuje tytuł/autor/isbn
-- loading state przy submit
+- modal ma focus trap, ESC, loading state
+- pokazuje dane książki
 
-## FE-E2. Akcja “Wypożycz” z katalogu
+### FE-14 (P0) — Akcja „Wypożycz” z katalogu
 AC:
-- po sukcesie: toast + invalidacja books
-- 409: czytelny komunikat
-- brak double click (disabled)
+- 409 -> komunikat „książka już wypożyczona”
+- po sukcesie refresh katalogu
 
-## FE-E3. Widok “Moje wypożyczenia”
+### FE-15 (P0) — Widok `/loans`: aktywne + historia
 AC:
-- aktywne + historia (sekcje lub tabs)
-- loading/empty/error
+- sekcja aktywne + historia (tabs lub sekcje)
+- zwrot z potwierdzeniem
 
-## FE-E4. Zwrot książki
+### FE-16 (P0) — Obsługa błędów 401/403 w widokach chronionych
 AC:
-- potwierdzenie
-- invalidacja “me loans” + ewentualnie books
+- 401 -> redirect do login
+- 403 -> komunikat + redirect
 
 ---
 
-# EPIC FE-F — ADMIN
+## EPIC FE-04 — ADMIN (P1)
 
-## FE-F1. Panel admina: routing i layout
+### FE-17 (P1) — Layout admina + routing
 AC:
-- `/admin` tylko dla ADMIN
-- layout admina spójny (tabs/side nav)
+- wspólny layout `/admin/*`
+- spójne tabs
 
-## FE-F2. Zarządzanie książkami (BookModal dodaj/edytuj)
+### FE-18 (P1) — `/admin/books`: CRUD książek (BookModal)
 AC:
-- walidacja pól + obsługa 409 ISBN
-- po zapisie: tabela odświeżona
-- edycja: prefill wartości
+- dodaj/edytuj/usuń z potwierdzeniami
+- 409 ISBN -> komunikat
 
-## FE-F3. Usuwanie książki (z potwierdzeniem)
+### FE-19 (P1) — `/admin/loans`: aktywne wypożyczenia + oznacz zwrot
 AC:
-- potwierdzenie
-- 409 (aktywne wypożyczenia) → czytelny komunikat
+- admin zamyka wypożyczenie
+- lista odświeżona
 
-## FE-F4. “Użytkownicy” (tabela + rola + liczba aktywnych wypożyczeń)
+### FE-20 (P1) — `/admin/users`: lista userów + activeLoansCount
 AC:
-- dane spójne z API
-- loading/empty/error
+- tabela userów: email/role/activeLoansCount
 
-## FE-F5. Usuwanie użytkownika z ograniczeniami
+### FE-21 (P1) — Usuwanie usera z ograniczeniami
 AC:
-- self-delete: UI blokuje + pokazuje powód
-- aktywne wypożyczenia: 409 → komunikat
-- po sukcesie: tabela odświeżona
-
-## FE-F6. “Wszystkie wypożyczenia” (ADMIN)
-AC:
-- lista (min. aktywne, opcjonalnie historia)
-- filtrowanie po statusie (zalecane)
-
-## FE-F7. Ręczne oznaczenie zwrotu
-AC:
-- admin może zamknąć dowolne wypożyczenie
-- po akcji: lista odświeżona, toast sukcesu/błędu
+- self-delete zablokowany w UI
+- 409 active loans -> komunikat
 
 ---
 
-# EPIC FE-G — UX, walidacja i odporność
+## EPIC FE-05 — UX i testy (P1)
 
-## FE-G1. System komunikatów (toast/banners)
+### FE-24 (P1) — Toast/Banner (globalny system komunikatów)
+### FE-25 (P1) — Testy krytycznych ścieżek (auth + books)
+### FE-26 (P2) — Testy krytycznych ścieżek (loans/admin)
+
 AC:
-- jednolity komponent toast
-- globalny handler błędów dla API (FE-B2)
-
-## FE-G2. Walidacja formularzy (client-side)
-AC:
-- wymagane pola
-- hasło min. 6 + confirm password w rejestracji
-- blokada submit gdy invalid
-
-## FE-G3. Stany ładowania i blokady
-AC:
-- brak podwójnych submitów
-- przyciski disabled w trakcie requestów
-- modale nie znikają bez informacji
-
-## FE-G4. Empty/Error states
-AC:
-- brak danych = sensowny ekran
-- błąd sieci/500 = komunikat + retry
-
-## FE-G5. A11y i ergonomia
-AC:
-- modal: ESC, focus trap
-- aria-label dla ikon
-- poprawny focus ring / nawigacja klawiaturą
-
-## FE-G6. i18n / formatowanie dat (opcjonalnie)
-AC:
-- daty w loans czytelne i spójne (PL)
-- brak surowych ISO stringów w UI
-
----
-
-# EPIC FE-H — Testy, dokumentacja, release
-
-## FE-H1. Testy (minimum krytyczne ścieżki)
-Zakres minimalny:
-- auth flow (login/register walidacja)
-- books list (search/sort/pagination)
-- LoanModal (open/confirm/cancel)
-AC:
-- `npm test` przechodzi lokalnie i w CI
-- testy powtarzalne (no flaky)
-
-Zadania:
-- wybrać runner (Vitest/Jest) + Testing Library
-- dodać testy integracyjne komponentów + mock API
-
-## FE-H2. Dokumentacja uruchomienia FE
-AC:
-- README: env + start lokalnie + start w Dockerze
-- nowa osoba uruchamia FE wg instrukcji
-
-## FE-H3. Produkcyjny build
-AC:
-- `npm run build` przechodzi
-- brak krytycznych błędów runtime po `npm start`
-- podstawowy happy path ręcznie sprawdzony
-
----
-
-# EPIC FE-I — Docker / Dev Compose / Azure / CI/CD (FE + DevOps)
-
-## FE-I0 (P0). Naprawa root docker-compose (E2E dev) pod FE
-AC:
-- `docker compose up --build` uruchamia FE/BE/DB i FE widzi API
-- dokumentacja w README
-
-Zadania:
-- poprawić DB port mapping i DATABASE_URL w compose
-- dopisać env dla FE (NEXT_PUBLIC_API_BASE_URL, NEXTAUTH_URL/SECRET)
-
-## FE-I1. Dockerfile FE (multi-stage) + tryb produkcyjny Next
-AC:
-- `docker build` działa
-- kontener startuje i serwuje FE
-- obraz możliwie mały (standalone output lub podobne)
-
-## FE-I2. docker-compose.dev.yml — FE w dev (hot reload)
-AC:
-- `docker compose -f docker-compose.dev.yml up` uruchamia FE w dev
-- zmiany w kodzie odświeżają się bez rebuild obrazu
-
-## FE-I3. docker-stack.yml (swarm) — serwis FE
-AC:
-- FE działa w swarm (replicas, update policy)
-- env (API url) jednoznaczny i udokumentowany
-
-## FE-I4. CI: quality gate dla FE
-AC:
-- na PR: lint + typecheck + test + build
-- blokuje merge przy porażce
-
-## FE-I5. CI: build & push image do GHCR
-AC:
-- obraz FE ląduje w GHCR (tag SHA + opcjonalnie semver)
-
-## FE-I6. CD: deploy
-AC:
-- pipeline aktualizuje stack
-- rollback: powrót do poprzedniego taga opisany w runbooku
+- `npm test` przechodzi, testy stabilne
